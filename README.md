@@ -27,3 +27,6 @@ to run the code on local machine in vs code:
 
    4. The code is optimized to automatically select either cuda/GPU or cpu, depend on the machine. no need to worry about,
       just check cell 7 and 8 and run them, itwill print if it will be running on GPU or not.
+
+
+ And in the file an extra file : exploreDataset.ipynb, can help to explore the dataset we use.
