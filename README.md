@@ -1,7 +1,11 @@
 A simple 1D-CNN implemented in pyTorch. I created only 3 layers ( not much deep) and set epoch on only 10 so it can work on my machine.
 With a strong PC with a strong GPU, can have epoch opp til 100 and more layers(10 for example). More deeper, sure better.
 to run the code on local machine in vs code: 
-1. copy the 2 folder records100 and records500 to the folder ptbxl_dataset-1.o.3
+1. copy the 2 folder records100 and records500 to the folder ptbxl_dataset-1.o.3: 
+  ptb-xl-dataset-1.0.3
+├── records100
+└── records500
+
 2. important to have the correct invironment, i have 2 files in the repo can help to have the pacagges and dependencies;
   befor starting installing and adding the pacagges, check python version install on machinen. here have the file .python-version, you can change it or install
   same on the machine and then activate it
