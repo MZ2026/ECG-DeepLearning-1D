@@ -11,3 +11,6 @@ __pycache__/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Ignore all contents in ptb-xl-dataset folder
+ptb-xl-dataset-1.0.3/

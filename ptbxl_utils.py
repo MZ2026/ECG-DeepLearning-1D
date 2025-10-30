@@ -3,74 +3,86 @@ import numpy as np
 import pandas as pd
 
 
-# PTB-XL Dataset Utility Functions
-# These functions help you:
-# 1. Filter the dataset to include only specific ECG labels (e.g., NORM or AFIB)
-# 2. Convert ECG diagnosis codes into numeric labels
-# 3. Select stratified folds for training/validation/testing
-# 4. Configure dataset frequency (100Hz or 500Hz)
-# 5. Print dataset statistics including total and class counts
+# The script/function is designed to prepare and manage the PTB-XL ECG dataset
+# for binary ECG classification tasks involving Atrial Fibrillation (AFIB).
+
+# Supported Modes:
+#   • Filtered mode (use_filtered=True):  Only NORM and AFIB samples are included.
+#       - Labels: NORM = 0, AFIB = 1
+#   • Full mode (use_filtered=False):  All ECG classes are included.
+#       - Labels: AFIB = 1, all other classes (including NORM) = 0
+
+# Main functionalities:
+# 1. Split dataset into stratified folds for training, validation, and testing
+# 2. Optionally filter to include only AFIB and NORM samples
+# 3. Convert ECG diagnosis codes (scp_codes) to numeric binary labels
+# 4. Assign ECG signal frequency (100Hz or 500Hz)
+# 5. Print dataset summaries and class distributions (per split and overall)
 
 
-# Function 1: Filter to keep only NORM/AFIB
-def filter_data(df):
-    """Filter PTB-XL DataFrame to include only NORM and AFIB samples."""
-    return df[df["scp_codes"].apply(
-        lambda s: "NORM" in ast.literal_eval(s) or "AFIB" in ast.literal_eval(s)
-    )].copy()
-
-
-# Function 2: Convert scp_codes to binary label (0=NORM, 1=AFIB)
-def label_to_binary(scp_str: str) -> int:
-    """Convert scp_codes string to binary label: AFIB→1, NORM→0."""
-    scp = ast.literal_eval(scp_str)
-    if "AFIB" in scp:
-        return 1
-    if "NORM" in scp:
-        return 0
-    return np.nan
-
-
-def get_primary_label(scp_str):
-    """Extract the first diagnosis code from scp_codes string."""
-    scp = ast.literal_eval(scp_str)
-    return list(scp.keys())[0] if len(scp) > 0 else None
+# Example usage:
+#   train_df, val_df, test_df, freq = setup_dataset(
+#       df,
+#       train_folds=[1,3],
+#       val_folds=[9],
+#       test_folds=[10],
+#       use_500Hz=False,
+#       use_filtered=True
+#   )
 
 
 
-# Function 3: Select folds for train/val/test
+
+# Function 1: Select folds for train/val/test with optional binary filtering.
 def select_folds(df, train_folds, val_folds, test_folds, filter_norm_afib=False):
     """
     Split PTB-XL dataset into training, validation, and test subsets based on folds.
-    
     PTB-XL comes pre-divided into 10 stratified folds (1–10).
     This function allows flexible selection of folds and optional NORM/AFIB filtering.
     """
 
-    # Ensure all fold inputs are lists
+    # Ensures all fold variables are lists (e.g., train_folds = [1,2,3]).
     if isinstance(train_folds, int): train_folds = [train_folds]
     if isinstance(val_folds, int):   val_folds = [val_folds]
     if isinstance(test_folds, int):  test_folds = [test_folds]
 
-    # Split DataFrame
+    # Split DataFrame and selects rows where strat_fold is in the specified folds.
     train_df = df[df["strat_fold"].isin(train_folds)].copy()
     val_df   = df[df["strat_fold"].isin(val_folds)].copy()
     test_df  = df[df["strat_fold"].isin(test_folds)].copy()
 
-    # Filter to NORM/AFIB if required
-    if filter_norm_afib:
-        train_df = filter_data(train_df)
-        val_df   = filter_data(val_df)
-        test_df  = filter_data(test_df)
+    # Filter PTB-XL DataFrame to keep only NORM/AFIB or keep all samples
+    def filter_data(df, use_filtered):
+        if use_filtered:
+            # Keep only NORM and AFIB
+            return df[df["scp_codes"].apply(
+                lambda s: "NORM" in ast.literal_eval(s) or "AFIB" in ast.literal_eval(s)
+            )].copy()
+        else:
+            # Keep all samples
+            return df.copy()
+        
 
-        # Add binary labels
-        for subset in [train_df, val_df, test_df]:
-            subset["label"] = subset["scp_codes"].apply(label_to_binary)
+    # Convert labels into binary (AFIB=1, NORM=0 eller all others=0)
+    def label_to_binary(scp_str: str, use_filtered=True) -> int:
+        scp = ast.literal_eval(scp_str)
+        if use_filtered:
+            if "AFIB" in scp:
+                return 1
+            if "NORM" in scp:
+                return 0
+            return np.nan  # exclude all others
+        else:
+            # AFIB = 1, all others = 0
+            return 1 if "AFIB" in scp else 0
 
-    else:
-        # Add a single primary label for full multi-class dataset
-        for subset in [train_df, val_df, test_df]:
-            subset["primary_label"] = subset["scp_codes"].apply(get_primary_label)
+    # Apply filtering and labeling
+    train_df = filter_data(train_df, filter_norm_afib)
+    val_df   = filter_data(val_df, filter_norm_afib)
+    test_df  = filter_data(test_df, filter_norm_afib)
+
+    for subset in [train_df, val_df, test_df]:
+        subset["label"] = subset["scp_codes"].apply(lambda s: label_to_binary(s, filter_norm_afib))
 
     
 
@@ -85,7 +97,7 @@ def select_folds(df, train_folds, val_folds, test_folds, filter_norm_afib=False)
     return train_df, val_df, test_df
 
 
-#Count class distribution
+# Function 2: Count label/class distribution
 def count_labels(df):
     """Count how many NORM, AFIB, and other samples exist."""
     norm_count = 0
@@ -104,6 +116,22 @@ def count_labels(df):
     return norm_count, afib_count, other_count
 
 
+# Function 3: Assign ECG signal frequency and filenames
+def set_signal_frequency(train_df, val_df, test_df, use_500Hz=False):
+    if use_500Hz:
+        for subset in [train_df, val_df, test_df]:
+            subset["filename"] = subset["filename_hr"]
+        frequency_rate = 500
+        print("Using ECG signal (500Hz)\n")
+    else:
+        for subset in [train_df, val_df, test_df]:
+            subset["filename"] = subset["filename_lr"]
+        frequency_rate = 100
+        print("Using ECG signal (100Hz)\n")
+
+    return train_df, val_df, test_df, frequency_rate
+
+
 # Function 4: Main wrapper — setup_dataset()
 def setup_dataset(df, train_folds, val_folds, test_folds, use_500Hz=False, use_filtered=False):
     """
@@ -116,43 +144,36 @@ def setup_dataset(df, train_folds, val_folds, test_folds, use_500Hz=False, use_f
         df, train_folds, val_folds, test_folds, filter_norm_afib=use_filtered
     )
 
-    # Choose signal frequency and assign correct filename column to each split
-    if use_500Hz:
-        for subset in [train_df, val_df, test_df]:
-            subset["filename"] = subset["filename_hr"]
-        frequency_rate = 500
-        print("Using ECG signal (500 Hz)\n")
-    else:
-        for subset in [train_df, val_df, test_df]:
-            subset["filename"] = subset["filename_lr"]
-        frequency_rate = 100
-        print("Using ECG signal (100 Hz)\n")
+    # Assign signal frequency and filenames
+    train_df, val_df, test_df, frequency_rate = set_signal_frequency(train_df, val_df, test_df, use_500Hz)
 
     # Dataset summary
-    total_samples = len(train_df) + len(val_df) + len(test_df)
     if use_filtered:
-     print("Using Filtered (Only NORM/AFIB)")
+     print("Using Filtered dataset (Only NORM/AFIB)")
     else:
-     print("Using full dataset (all classes)")
+     print("Using full dataset (AFIB vs ALL — all non-AFIB treated as NORM)")
     print(f"Sampling rate: {frequency_rate}Hz")
 
     
 
-    # Class distribution
+    # to print class counts per split
+    def print_counts(df_split, name):
+        n_afib = (df_split["label"] == 1).sum()
+        n_other = (df_split["label"] == 0).sum()
+        label_name = "NORM" if use_filtered else "Non-AFIB"
+        print(f"{name:<10} | AFIB: {n_afib:<6} | {label_name}: {n_other:<6} | Total: {len(df_split)}")
+
+    print_counts(train_df, "Train")
+    print_counts(val_df,   "Validation")
+    print_counts(test_df,  "Test")
+
+    # Overall totals
     combined_df = pd.concat([train_df, val_df, test_df])
-    norm_count, afib_count, other_count = count_labels(combined_df)
+    n_afib = (combined_df["label"] == 1).sum()
+    n_other = (combined_df["label"] == 0).sum()
 
-    if use_filtered:
-        print("\nClass Summary (filtered):")
-        print(f" NORM: {norm_count}")
-        print(f" AFIB: {afib_count}")
-    else:
-        print("\nClass Summary (full):")
-        print(f" NORM: {norm_count}")
-        print(f" AFIB: {afib_count}")
-        print(f" Other: {other_count}")
+    print("\nTotals:")
+    label_name = "NORM" if use_filtered else "Non-AFIB"
+    print(f" AFIB: {n_afib} | {label_name}: {n_other} | Total: {len(combined_df)}\n")
 
-    print() 
-
-   
     return train_df, val_df, test_df, frequency_rate
