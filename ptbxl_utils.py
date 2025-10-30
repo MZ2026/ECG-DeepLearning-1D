@@ -160,8 +160,10 @@ def setup_dataset(df, train_folds, val_folds, test_folds, use_500Hz=False, use_f
     def print_counts(df_split, name):
         n_afib = (df_split["label"] == 1).sum()
         n_other = (df_split["label"] == 0).sum()
+        total = len(df_split)
         label_name = "NORM" if use_filtered else "Non-AFIB"
-        print(f"{name:<10} | AFIB: {n_afib:<6} | {label_name}: {n_other:<6} | Total: {len(df_split)}")
+        afib_percent = (n_afib / total) * 100
+        print(f"{name:<10} | AFIB: {n_afib:<6} | {label_name}: {n_other:<6} | Total: {total:<6} | AFIB%: {afib_percent:5.2f}%")
 
     print_counts(train_df, "Train")
     print_counts(val_df,   "Validation")
@@ -171,9 +173,12 @@ def setup_dataset(df, train_folds, val_folds, test_folds, use_500Hz=False, use_f
     combined_df = pd.concat([train_df, val_df, test_df])
     n_afib = (combined_df["label"] == 1).sum()
     n_other = (combined_df["label"] == 0).sum()
+    total = len(combined_df)
+    label_name = "NORM" if use_filtered else "Non-AFIB"
+    afib_percent = (n_afib / total) * 100
 
     print("\nTotals:")
     label_name = "NORM" if use_filtered else "Non-AFIB"
-    print(f" AFIB: {n_afib} | {label_name}: {n_other} | Total: {len(combined_df)}\n")
+    print(f" AFIB: {n_afib:<6} | {label_name}: {n_other:<6} | Total: {total:<6} | AFIB%: {afib_percent:5.2f}%\n")
 
     return train_df, val_df, test_df, frequency_rate
