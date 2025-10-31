@@ -1,6 +1,8 @@
 import ast
 import numpy as np
 import pandas as pd
+import os
+import wfdb
 
 
 # The script/function is designed to prepare and manage the PTB-XL ECG dataset
@@ -16,8 +18,9 @@ import pandas as pd
 # 1. Split dataset into stratified folds for training, validation, and testing
 # 2. Optionally filter to include only AFIB and NORM samples
 # 3. Convert ECG diagnosis codes (scp_codes) to numeric binary labels
-# 4. Assign ECG signal frequency (100Hz or 500Hz)
+# 4. Assign ECG sampling frequency (100Hz or 500Hz)
 # 5. Print dataset summaries and class distributions (per split and overall)
+# 6. Load ECG records using WFDB (with optional metadata)
 
 
 # Example usage:
@@ -30,6 +33,8 @@ import pandas as pd
 #       use_filtered=True
 #   )
 
+#   sample_path = train_df.iloc[0]["filename"]
+#   signal, info = load_ecg(sample_path, base_dir="ptb-xl-dataset-1.0.3",  return_meta=True)
 
 
 
@@ -121,15 +126,15 @@ def set_signal_frequency(train_df, val_df, test_df, use_500Hz=False):
     if use_500Hz:
         for subset in [train_df, val_df, test_df]:
             subset["filename"] = subset["filename_hr"]
-        frequency_rate = 500
-        print("Using ECG signal (500Hz)\n")
+        sampling_frequency = 500
+        print("Selected ECG sampling rate: 500Hz")
     else:
         for subset in [train_df, val_df, test_df]:
             subset["filename"] = subset["filename_lr"]
-        frequency_rate = 100
-        print("Using ECG signal (100Hz)\n")
+        sampling_frequency = 100
+        print("Selected ECG sampling rate: 100Hz")
 
-    return train_df, val_df, test_df, frequency_rate
+    return train_df, val_df, test_df, sampling_frequency
 
 
 # Function 4: Main wrapper — setup_dataset()
@@ -145,14 +150,13 @@ def setup_dataset(df, train_folds, val_folds, test_folds, use_500Hz=False, use_f
     )
 
     # Assign signal frequency and filenames
-    train_df, val_df, test_df, frequency_rate = set_signal_frequency(train_df, val_df, test_df, use_500Hz)
+    train_df, val_df, test_df, sampling_frequency = set_signal_frequency(train_df, val_df, test_df, use_500Hz)
 
     # Dataset summary
     if use_filtered:
-     print("Using Filtered dataset (Only NORM/AFIB)")
+     print("Selected dataset mode: Filtered (AFIB vs NORM)")
     else:
-     print("Using full dataset (AFIB vs ALL — all non-AFIB treated as NORM)")
-    print(f"Sampling rate: {frequency_rate}Hz")
+     print("Selected dataset mode: Full (AFIB vs ALL other classes)\n")
 
     
 
@@ -181,4 +185,31 @@ def setup_dataset(df, train_folds, val_folds, test_folds, use_500Hz=False, use_f
     label_name = "NORM" if use_filtered else "Non-AFIB"
     print(f" AFIB: {n_afib:<6} | {label_name}: {n_other:<6} | Total: {total:<6} | AFIB%: {afib_percent:5.2f}%\n")
 
-    return train_df, val_df, test_df, frequency_rate
+    return train_df, val_df, test_df, sampling_frequency
+
+
+
+# Funciton 5: Load a single ECG record from the PTB-XL dataset using WFDB.
+def load_ecg(record_path, base_dir=None, return_meta=False):
+
+    # Automatically detect dataset directory if not explicitly provided
+    if base_dir is None:
+        default_dir = os.path.join(os.getcwd(), "ptb-xl-dataset-1.0.3")
+        base_dir = default_dir if os.path.exists(default_dir) else os.getcwd()
+
+    # Construct the full path to the ECG file
+    full_path = os.path.join(base_dir, record_path)
+
+    # Check that both header (.hea) and signal (.dat) files exist
+    for ext in [".hea", ".dat"]:
+        if not os.path.exists(full_path + ext):
+            raise FileNotFoundError(f"Missing file: {full_path + ext}")
+
+    record = wfdb.rdrecord(full_path)
+    # Convert to float32 NumPy array for model compatibility
+    ecg = record.p_signal.astype(np.float32)
+
+    # Optionally return metadata (sampling frequency, lead names)
+    if return_meta:
+        return ecg, {"fs": record.fs, "leads": record.sig_name}
+    return ecg
